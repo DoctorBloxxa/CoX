@@ -2,13 +2,17 @@ assert(Drawing, "Your exploit can't draw anything.")
 
 local inf = math.huge
 local abs = math.abs
+local clamp = math.clamp
 local CFN = CFrame.new
 local V3N = Vector3.new
 local V2N = Vector2.new
 local Draw = Drawing.new
+local HSV = Color3.fromHSV
 local INT = false
 
 local WHITE = Color3.new(1,1,1)
+local BLACK = Color3.new()
+local LOWVAL = (2^30-1)
 local V2Z = Vector2.zero
 
 local User = game:GetService("Players").LocalPlayer
@@ -38,9 +42,14 @@ end
 
 local Players = {}
 
+-- ESP is supposed to be hot-programmable in order to adapt to some of the more problematic games
+
 local confT = {
 	esp = {
-		lookup = function(): (Player, Model) -- This is supposed to be programmable. Return a player and a Model.
+		dynamic = false,
+		healthbar = true,
+
+		lookup = function(): (Player, Model)
 			local A = {}
 
 			for Player, _ in pairs(Players) do
@@ -50,7 +59,29 @@ local confT = {
 			return A
 		end,
 
-		dynamic = false,
+		filter = function(Character: Model, Player: Player): boolean
+			local focused = workspace:IsAncestorOf(Character) and not (Character:IsAncestorOf(Camera.CameraSubject) or Character == Camera.CameraSubject)
+			
+			local alive = true
+			local Hum = Character:FindFirstChildOfClass("Humanoid")
+
+			if Hum then
+				alive = not (Hum.Health==0 or Hum.Health<0)
+			end
+
+			return focused and alive
+		end,
+		
+		health = function(Character: Model, Player: Player): boolean
+			local val = 1
+			local Hum = Character:FindFirstChildOfClass("Humanoid")
+
+			if Hum then
+					val = (Hum.Health/Hum.MaxHealth)
+			end
+			
+			return val, HSV(val*.4,.9,.98)
+		end,
 	};
 };
 
@@ -112,8 +143,14 @@ end
 local function registerPlayer(Player: Player)
 	dropPlayer(Player)
 	Players[Player] = {
-		Box = Draw("Quad"),
+		box = Draw("Quad"),
+		healthBar = Draw("Line"),
+		healthBarBackground = Draw("Line"),
 	}
+
+	Players[Player].box.ZIndex = LOWVAL+1
+	Players[Player].healthBarBackground.ZIndex = LOWVAL+2
+	Players[Player].healthBar.ZIndex = LOWVAL+3
 end
 
 
@@ -124,30 +161,40 @@ game:GetService('Players').PlayerRemoving:Connect(dropPlayer)
 
 
 
-game:GetService('RunService').RenderStepped:Connect(function() -- Visuals loop
+local function renderLoop() -- Visuals loop
 	Camera = workspace.CurrentCamera
 	local FovDelta = (70/Camera.FieldOfView)
 	local method: (any) -> (any, Model) = conf.esp.lookup()
+	local filter: (Model, any) -> boolean = conf.esp.filter
+	local health: (Model, any) -> number = conf.esp.health
 
 	for Player, Character in (method) do
 		local UR,UL,DL,DR,V1,V2,V3,V4
-		local Box = Players[Player].Box
-		local TeamColor = Player.TeamColor.Color:Lerp(WHITE,.5) or WHITE
+		local box = Players[Player].box
+		local h1 = Players[Player].healthBarBackground
+		local h2 = Players[Player].healthBar
+		local teamColor = Player.TeamColor.Color:Lerp(WHITE,.5) or WHITE
 
-		-- Solara moment
-		Box.PointA = V2Z
-		Box.PointB = V2Z
-		Box.PointC = V2Z
-		Box.PointD = V2Z
+		-- Solara moment. If Solara's drawing API wasn't this dogshit this could run much faster
+		box.PointA = V2Z
+		box.PointB = V2Z
+		box.PointC = V2Z
+		box.PointD = V2Z
+		
+		h1.From = V2Z
+		h1.To = V2Z
+
+		h2.From = V2Z
+		h2.To = V2Z
 		--
 
-		if workspace:IsAncestorOf(Character) then
+		if filter(Character, Player) then
 			local CF = Character:GetModelCFrame()
-			
+
 			if not conf.esp.dynamic then
-				CF = CFN(Character:GetModelCFrame().p, Camera.CFrame.p)
+				CF = CFN(Character:GetModelCFrame().p, Camera.CFrame.p)*CFrame.Angles(0,math.pi,0)
 			end
-			
+
 			local Pos, Size = getBoundingBox(
 				Character, 
 				false, 
@@ -156,23 +203,81 @@ game:GetService('RunService').RenderStepped:Connect(function() -- Visuals loop
 			); Size*=.5
 
 			local standard = (0.009*Resolution.Y*(Size.X+Size.Y)*FovDelta); standard = 2*standard/(Camera.CFrame.p-Pos.p).Magnitude
+			standard = clamp(standard, 1, inf)
 
 			UR,V1 = WorldToViewport(Pos*(V3N(Size.X,Size.Y,0)))
 			UL,V2 = WorldToViewport(Pos*(V3N(-Size.X,Size.Y,0)))
 			DL,V3 = WorldToViewport(Pos*(V3N(-Size.X,-Size.Y,0)))
 			DR,V4 = WorldToViewport(Pos*(V3N(Size.X,-Size.Y,0)))
+			
+			if conf.esp.healthbar then
+				local DL = V2N(DL.X,DL.Y)
+				local DR = V2N(DR.X,DR.Y)
+
+				local h, c = health(Character, Player)
+				
+				h1.Color = BLACK
+				h2.Color = BLACK
+				
+				h1.From = DL
+				h1.To = DR
+				
+				h2.From = DL
+				h2.To = DL + (DR-DL)*h
+				h2.Color = c
+
+				h1.Thickness = standard
+				h2.Thickness = standard
+
+				h1.Visible = V1 and V2 and V3 and V4
+				h2.Visible = V1 and V2 and V3 and V4
+			end
 
 			if V1 and V2 and V3 and V4 then
-				Box.PointA = V2N(UR.X,UR.Y)
-				Box.PointB = V2N(UL.X,UL.Y)
-				Box.PointC = V2N(DL.X,DL.Y)
-				Box.PointD = V2N(DR.X,DR.Y)
+				box.PointA = V2N(UR.X,UR.Y)
+				box.PointB = V2N(UL.X,UL.Y)
+				box.PointC = V2N(DL.X,DL.Y)
+				box.PointD = V2N(DR.X,DR.Y)
+
+				box.Thickness = standard
 			end
 		end
 
-		Box.Visible = V1 and V2 and V3 and V4
-		Box.Color = TeamColor
+		box.Visible = V1 and V2 and V3 and V4
+		box.Color = teamColor
 	end
-end)
+end
 
-return conf, confT
+local tracker = {}
+local configurator = {}
+
+function configurator:enableESP()
+	tracker.renderLoop = game:GetService("RunService").RenderStepped:connect(renderLoop)
+end
+
+function configurator:disableESP()
+	tracker.renderLoop:Disconnect()
+
+	for Player, Contents in Players do
+		local box = Contents.box
+		local h1 = Contents.healthBarBackground
+		local h2 = Contents.healthBar
+		
+		box.PointA = V2Z
+		box.PointB = V2Z
+		box.PointC = V2Z
+		box.PointD = V2Z
+		
+		h1.From = V2Z
+		h1.To = V2Z
+		
+		h1.From = V2Z
+		h2.To = V2Z
+		
+		box.Visible = false
+		h1.Visible = false
+		h2.Visible = false
+	end
+end
+
+return configurator
