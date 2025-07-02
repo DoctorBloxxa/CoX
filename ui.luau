@@ -1,1 +1,1 @@
-warn('I like waffles')
+local conf, template = loadstring(game:HttpGet("https://raw.githubusercontent.com/DoctorBloxxa/CoX/master/Core/CoX.luau", true))()

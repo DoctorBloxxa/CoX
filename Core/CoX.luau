@@ -40,11 +40,11 @@ local Players = {}
 
 local confT = {
 	esp = {
-		lookup = function()
+		lookup = function(): (Player, Model) -- This is supposed to be programmable. Return a player and a Model.
 			local A = {}
 
 			for Player, _ in pairs(Players) do
-				A[Player] = Player.Character
+				A[Player] = Player.Character or game
 			end
 
 			return A
@@ -124,22 +124,36 @@ game:GetService('Players').PlayerRemoving:Connect(dropPlayer)
 
 
 
-game:GetService('RunService').PreAnimation:Connect(function() -- Visuals loop
+game:GetService('RunService').RenderStepped:Connect(function() -- Visuals loop
 	Camera = workspace.CurrentCamera
 	local FovDelta = (70/Camera.FieldOfView)
+	local method: (any) -> (any, Model) = conf.esp.lookup()
 
-	for Player, Character in (conf.esp.lookup()) do
+	for Player, Character in (method) do
 		local UR,UL,DL,DR,V1,V2,V3,V4
 		local Box = Players[Player].Box
 		local TeamColor = Player.TeamColor.Color:Lerp(WHITE,.5) or WHITE
 
-		if Character then
+		-- Solara moment
+		Box.PointA = V2Z
+		Box.PointB = V2Z
+		Box.PointC = V2Z
+		Box.PointD = V2Z
+		--
+
+		if workspace:IsAncestorOf(Character) then
+			local CF = Character:GetModelCFrame()
+			
+			if not conf.esp.dynamic then
+				CF = CFN(Character:GetModelCFrame().p, Camera.CFrame.p)
+			end
+			
 			local Pos, Size = getBoundingBox(
 				Character, 
 				false, 
-				conf.esp.dynamic and Character:GetModelCFrame() or CFN(Character:GetModelCFrame().p)*Camera.CFrame.Rotation, 
-				true
-			)
+				CF, 
+				false
+			); Size*=.5
 
 			local standard = (0.009*Resolution.Y*(Size.X+Size.Y)*FovDelta); standard = 2*standard/(Camera.CFrame.p-Pos.p).Magnitude
 
@@ -148,23 +162,15 @@ game:GetService('RunService').PreAnimation:Connect(function() -- Visuals loop
 			DL,V3 = WorldToViewport(Pos*(V3N(-Size.X,-Size.Y,0)))
 			DR,V4 = WorldToViewport(Pos*(V3N(Size.X,-Size.Y,0)))
 
-			Box.PointA = V2N(UR.X,UR.Y)
-			Box.PointB = V2N(UL.X,UL.Y)
-			Box.PointC = V2N(DL.X,DL.Y)
-			Box.PointD = V2N(DR.X,DR.Y)
-			
-		else
-			-- Solara moment
-			Box.PointA = V2Z
-			Box.PointB = V2Z
-			Box.PointC = V2Z
-			Box.PointD = V2Z
-			--
+			if V1 and V2 and V3 and V4 then
+				Box.PointA = V2N(UR.X,UR.Y)
+				Box.PointB = V2N(UL.X,UL.Y)
+				Box.PointC = V2N(DL.X,DL.Y)
+				Box.PointD = V2N(DR.X,DR.Y)
+			end
 		end
 
 		Box.Visible = V1 and V2 and V3 and V4
-
-		Box.Transparency = 1
 		Box.Color = TeamColor
 	end
 end)
