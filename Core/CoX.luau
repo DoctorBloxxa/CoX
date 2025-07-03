@@ -56,7 +56,7 @@ local Players = {}
 
 local confT = {
 	esp = {
-		dynamic = true,
+		dynamic = false,
 		healthbar = false,
 
 		lookup = function(): {[Player]: Model}
@@ -213,9 +213,7 @@ local function renderLoop() -- Visuals loop
 				false
 			); Size*=.5
 
-			--local standard = 1 + (((0.018*Resolution.Y*(Size.X+Size.Y)*FovDelta))/(Camera.CFrame.Position-Pos.Position).Magnitude)
-			
-			local standard = 1
+			local standard = 1 + (((0.018*Resolution.Y*(Size.X+Size.Y)*FovDelta))/(Camera.CFrame.Position-Pos.Position).Magnitude)
 			
 			UR,V1 = WorldToViewport(Pos*(V3N(Size.X,Size.Y,0)))
 			UL,V2 = WorldToViewport(Pos*(V3N(-Size.X,Size.Y,0)))
@@ -268,6 +266,7 @@ function configurator:enableESP()
 	filter = conf.esp.filter
 	boundingbox = conf.esp.boundingbox
 	health = conf.esp.health
+	
 	tracker.renderLoop = game:GetService("RunService").RenderStepped:connect(renderLoop)
 end
 
