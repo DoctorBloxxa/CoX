@@ -56,7 +56,7 @@ local Players = {}
 local confT = {
 	esp = {
 		dynamic = false,
-		healthbar = true,
+		healthbar = false,
 
 		lookup = function(): {[Player]: Model}
 			local A = {}
