@@ -202,8 +202,9 @@ local function renderLoop() -- Visuals loop
 				false
 			); Size*=.5
 
-			local standard = (0.009*Resolution.Y*(Size.X+Size.Y)*FovDelta); standard = 2*standard/(Camera.CFrame.p-Pos.p).Magnitude
-			standard = clamp(standard, 1, inf)
+			local standard = (0.009*Resolution.Y*(Size.X+Size.Y)*FovDelta)
+			standard = 2*standard/(Camera.CFrame.p-Pos.p).Magnitude
+			standard +=1
 
 			UR,V1 = WorldToViewport(Pos*(V3N(Size.X,Size.Y,0)))
 			UL,V2 = WorldToViewport(Pos*(V3N(-Size.X,Size.Y,0)))
