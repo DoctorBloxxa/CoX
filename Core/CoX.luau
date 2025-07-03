@@ -63,7 +63,7 @@ local confT = {
 			local focused = workspace:IsAncestorOf(Character) and not (Character:IsAncestorOf(Camera.CameraSubject) or Character == Camera.CameraSubject)
 			
 			local alive = true
-			local Hum = Character:FindFirstChildOfClass("Humanoid")
+			local Hum = Character["Humanoid"] -- If your game of choice has issues with this, then I don't know what to tell you. I should probably daemonise this with events instead.
 
 			if Hum then
 				alive = not (Hum.Health==0 or Hum.Health<0)
@@ -210,8 +210,8 @@ local function renderLoop() -- Visuals loop
 			DR,V4 = WorldToViewport(Pos*(V3N(Size.X,-Size.Y,0)))
 			
 			if conf.esp.healthbar then
-				local DL = V2N(DL.X,DL.Y)
-				local DR = V2N(DR.X,DR.Y)
+				DL = V2N(DL.X,DL.Y)
+				DR = V2N(DR.X,DR.Y)
 
 				local h, c = health(Character, Player)
 				
@@ -235,8 +235,8 @@ local function renderLoop() -- Visuals loop
 			if V1 and V2 and V3 and V4 then
 				box.PointA = V2N(UR.X,UR.Y)
 				box.PointB = V2N(UL.X,UL.Y)
-				box.PointC = V2N(DL.X,DL.Y)
-				box.PointD = V2N(DR.X,DR.Y)
+				box.PointC = DL
+				box.PointD = DR
 
 				box.Thickness = standard
 			end
