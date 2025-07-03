@@ -1,3 +1,5 @@
+--!strict
+
 assert(Drawing, "Your exploit can't draw anything.")
 
 local inf = math.huge
@@ -25,7 +27,7 @@ local WorldToViewport = function(...) return WTVP(Camera, ...) end
 
 -- http://lua-users.org/wiki/CopyTable
 
-function deepCopy(orig)
+function deepCopy(orig: any): any
 	local orig_type = type(orig)
 	local copy
 	if orig_type == 'table' then
@@ -42,14 +44,12 @@ end
 
 local Players = {}
 
--- ESP is supposed to be hot-programmable in order to adapt to some of the more problematic games
-
 local confT = {
 	esp = {
 		dynamic = false,
 		healthbar = true,
 
-		lookup = function(): (Player, Model)
+		lookup = function(): {[Player]: Model}
 			local A = {}
 
 			for Player, _ in pairs(Players) do
@@ -61,9 +61,9 @@ local confT = {
 
 		filter = function(Character: Model, Player: Player): boolean
 			local focused = workspace:IsAncestorOf(Character) and not (Character:IsAncestorOf(Camera.CameraSubject) or Character == Camera.CameraSubject)
-			
+
 			local alive = true
-			local Hum = Character["Humanoid"] -- If your game of choice has issues with this, then I don't know what to tell you. I should probably daemonise this with events instead.
+			local Hum = Character:FindFirstChildOfClass("Humanoid")
 
 			if Hum then
 				alive = not (Hum.Health==0 or Hum.Health<0)
@@ -71,15 +71,15 @@ local confT = {
 
 			return focused and alive
 		end,
-		
-		health = function(Character: Model, Player: Player): boolean
+
+		health = function(Character: Model, Player: Player): (number, Color3)
 			local val = 1
 			local Hum = Character:FindFirstChildOfClass("Humanoid")
 
 			if Hum then
-					val = (Hum.Health/Hum.MaxHealth)
+				val = (Hum.Health/Hum.MaxHealth)
 			end
-			
+
 			return val, HSV(val*.4,.9,.98)
 		end,
 	};
@@ -88,18 +88,20 @@ local confT = {
 local conf = deepCopy(confT)
 
 local function getBoundingBox(model: Instance, recursive: boolean, orientation: CFrame, mustcollide: boolean) ----- copypasted code xdflol
+	local modelt
+
 	if typeof(model) == "Instance" then
-		model = recursive and model:GetDescendants() or model:GetChildren() --- had to modify some shit, last two variables are implemented by me
+		modelt = recursive and model:GetDescendants() or model:GetChildren() --- had to modify some shit, last two variables are implemented by me
 	end
-	local orientation = orientation~=nil and orientation or CFN()
+
 	local minx, miny, minz = inf,inf,inf
 	local maxx, maxy, maxz = -inf,-inf,-inf
-	for _, obj in pairs(model) do
+	for _, obj in pairs(modelt) do
 		if obj:IsA("BasePart") then
 			if (mustcollide==true and obj.CanCollide==false) then continue end
-			local cf = orientation:toObjectSpace(obj.CFrame)
+			local cf = orientation:ToObjectSpace(obj.CFrame)
 			local sx, sy, sz = obj.Size.X, obj.Size.Y, obj.Size.Z
-			local x, y, z, R00, R01, R02, R10, R11, R12, R20, R21, R22 = cf:components()
+			local x, y, z, R00, R01, R02, R10, R11, R12, R20, R21, R22 = cf:GetComponents()
 			local wsx = (abs(R00) * sx + abs(R01) * sy + abs(R02) * sz)*.5
 			local wsy = (abs(R10) * sx + abs(R11) * sy + abs(R12) * sz)*.5
 			local wsz = (abs(R20) * sx + abs(R21) * sy + abs(R22) * sz)*.5
@@ -125,7 +127,7 @@ local function getBoundingBox(model: Instance, recursive: boolean, orientation: 
 	end
 	local omin, omax = V3N(minx, miny, minz), V3N(maxx, maxy, maxz)
 	local omiddle = (omax+omin)*.5
-	local wCf = orientation - orientation.p + orientation:pointToWorldSpace(omiddle)
+	local wCf = orientation - orientation.Position + orientation:PointToWorldSpace(omiddle)
 	local size = (omax-omin)
 	return wCf, size
 end
@@ -164,9 +166,9 @@ game:GetService('Players').PlayerRemoving:Connect(dropPlayer)
 local function renderLoop() -- Visuals loop
 	Camera = workspace.CurrentCamera
 	local FovDelta = (70/Camera.FieldOfView)
-	local method: (any) -> (any, Model) = conf.esp.lookup()
-	local filter: (Model, any) -> boolean = conf.esp.filter
-	local health: (Model, any) -> number = conf.esp.health
+	local method: (...any) -> (Player, Model) 	= conf.esp.lookup()
+	local filter: (...any) -> boolean 			= conf.esp.filter
+	local health: (...any) -> (number, Color3)	= conf.esp.health
 
 	for Player, Character in (method) do
 		local UR,UL,DL,DR,V1,V2,V3,V4
@@ -180,7 +182,7 @@ local function renderLoop() -- Visuals loop
 		box.PointB = V2Z
 		box.PointC = V2Z
 		box.PointD = V2Z
-		
+
 		h1.From = V2Z
 		h1.To = V2Z
 
@@ -189,10 +191,10 @@ local function renderLoop() -- Visuals loop
 		--
 
 		if filter(Character, Player) then
-			local CF = Character:GetModelCFrame()
+			local CF = Character:GetPivot()
 
 			if not conf.esp.dynamic then
-				CF = CFN(Character:GetModelCFrame().p, Camera.CFrame.p)*CFrame.Angles(0,math.pi,0)
+				CF = CFN(CF.Position, Camera.CFrame.p)*CFrame.Angles(0,math.pi,0)
 			end
 
 			local Pos, Size = getBoundingBox(
@@ -208,19 +210,19 @@ local function renderLoop() -- Visuals loop
 			UL,V2 = WorldToViewport(Pos*(V3N(-Size.X,Size.Y,0)))
 			DL,V3 = WorldToViewport(Pos*(V3N(-Size.X,-Size.Y,0)))
 			DR,V4 = WorldToViewport(Pos*(V3N(Size.X,-Size.Y,0)))
-			
+
 			if conf.esp.healthbar then
 				DL = V2N(DL.X,DL.Y)
 				DR = V2N(DR.X,DR.Y)
 
 				local h, c = health(Character, Player)
-				
+
 				h1.Color = BLACK
 				h2.Color = BLACK
-				
+
 				h1.From = DL
 				h1.To = DR
-				
+
 				h2.From = DL
 				h2.To = DL + (DR-DL)*h
 				h2.Color = c
@@ -261,22 +263,29 @@ function configurator:disableESP()
 		local box = Contents.box
 		local h1 = Contents.healthBarBackground
 		local h2 = Contents.healthBar
-		
+
 		box.PointA = V2Z
 		box.PointB = V2Z
 		box.PointC = V2Z
 		box.PointD = V2Z
-		
+
 		h1.From = V2Z
 		h1.To = V2Z
-		
+
 		h1.From = V2Z
 		h2.To = V2Z
-		
+
 		box.Visible = false
 		h1.Visible = false
 		h2.Visible = false
 	end
+end
+
+function configurator:setValue()
+end
+
+function configurator:getValue(): any
+	return 1
 end
 
 return configurator
