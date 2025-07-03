@@ -25,6 +25,15 @@ local Camera = workspace.CurrentCamera
 local WTVP = Camera.WorldToViewportPoint
 local WorldToViewport = function(...) return WTVP(Camera, ...) end
 
+-- Define globals with strict types. Hopefully this helps shave off some frametime.
+
+local method: (...any) -> {[Player]: Model}
+local filter: (...any) -> boolean
+local health: (...any) -> (number, Color3)
+
+--
+
+
 -- http://lua-users.org/wiki/CopyTable
 
 function deepCopy(orig: any): any
@@ -166,11 +175,8 @@ game:GetService('Players').PlayerRemoving:Connect(dropPlayer)
 local function renderLoop() -- Visuals loop
 	Camera = workspace.CurrentCamera
 	local FovDelta = (70/Camera.FieldOfView)
-	local method: (...any) -> (Player, Model) 	= conf.esp.lookup()
-	local filter: (...any) -> boolean 			= conf.esp.filter
-	local health: (...any) -> (number, Color3)	= conf.esp.health
 
-	for Player, Character in (method) do
+	for Player, Character in (method()) do
 		local UR,UL,DL,DR,V1,V2,V3,V4
 		local box = Players[Player].box
 		local h1 = Players[Player].healthBarBackground
@@ -253,6 +259,10 @@ local tracker = {}
 local configurator = {}
 
 function configurator:enableESP()
+	method = conf.esp.lookup
+	filter = conf.esp.filter
+	health = conf.esp.health
+	
 	tracker.renderLoop = game:GetService("RunService").RenderStepped:connect(renderLoop)
 end
 
