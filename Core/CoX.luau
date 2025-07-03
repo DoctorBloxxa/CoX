@@ -29,6 +29,7 @@ local WorldToViewport = function(...) return WTVP(Camera, ...) end
 
 local method: (...any) -> {[Player]: Model}
 local filter: (...any) -> boolean
+local boundingbox: (any) -> boolean
 local health: (...any) -> (number, Color3)
 
 --
@@ -55,7 +56,7 @@ local Players = {}
 
 local confT = {
 	esp = {
-		dynamic = false,
+		dynamic = true,
 		healthbar = false,
 
 		lookup = function(): {[Player]: Model}
@@ -66,6 +67,10 @@ local confT = {
 			end
 
 			return A
+		end,
+		
+		boundingbox = function(Part: any): boolean
+			return Part.ClassName == "Part" or Part.ClassName == "MeshPart"
 		end,
 
 		filter = function(Character: Model, Player: Player): boolean
@@ -99,14 +104,12 @@ local conf = deepCopy(confT)
 local function getBoundingBox(model: Instance, recursive: boolean, orientation: CFrame, mustcollide: boolean) ----- copypasted code xdflol
 	local modelt
 
-	if typeof(model) == "Instance" then
-		modelt = recursive and model:GetDescendants() or model:GetChildren() --- had to modify some shit, last two variables are implemented by me
-	end
+	modelt = recursive and model:GetDescendants() or model:GetChildren() --- had to modify some shit, last two variables are implemented by me
 
 	local minx, miny, minz = inf,inf,inf
 	local maxx, maxy, maxz = -inf,-inf,-inf
 	for _, obj in pairs(modelt) do
-		if obj:IsA("BasePart") then
+		if boundingbox(obj) then
 			if (mustcollide==true and obj.CanCollide==false) then continue end
 			local cf = orientation:ToObjectSpace(obj.CFrame)
 			local sx, sy, sz = obj.Size.X, obj.Size.Y, obj.Size.Z
@@ -210,17 +213,19 @@ local function renderLoop() -- Visuals loop
 				false
 			); Size*=.5
 
-			local standard = 1 + (((0.018*Resolution.Y*(Size.X+Size.Y)*FovDelta))/(Camera.CFrame.p-Pos.p).Magnitude)
-
+			--local standard = 1 + (((0.018*Resolution.Y*(Size.X+Size.Y)*FovDelta))/(Camera.CFrame.Position-Pos.Position).Magnitude)
+			
+			local standard = 1
+			
 			UR,V1 = WorldToViewport(Pos*(V3N(Size.X,Size.Y,0)))
 			UL,V2 = WorldToViewport(Pos*(V3N(-Size.X,Size.Y,0)))
 			DL,V3 = WorldToViewport(Pos*(V3N(-Size.X,-Size.Y,0)))
 			DR,V4 = WorldToViewport(Pos*(V3N(Size.X,-Size.Y,0)))
+			
+			DL = V2N(DL.X,DL.Y)
+			DR = V2N(DR.X,DR.Y)
 
 			if conf.esp.healthbar then
-				DL = V2N(DL.X,DL.Y)
-				DR = V2N(DR.X,DR.Y)
-
 				local h, c = health(Character, Player)
 
 				h1.Color = BLACK
@@ -261,8 +266,8 @@ local configurator = {}
 function configurator:enableESP()
 	method = conf.esp.lookup
 	filter = conf.esp.filter
+	boundingbox = conf.esp.boundingbox
 	health = conf.esp.health
-	
 	tracker.renderLoop = game:GetService("RunService").RenderStepped:connect(renderLoop)
 end
 
